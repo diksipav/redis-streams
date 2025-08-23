@@ -1,0 +1,18 @@
+# Rust build output
+/target
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
+
+# Environment variables
+.env
