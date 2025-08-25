@@ -1,8 +1,8 @@
+use redis_streams::{Database, Entry, EntryId, RangeEnd, RangeStart};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::str::FromStr;
 use tokio::net::{TcpListener, TcpStream};
-use redis_streams::{Database, Entry, EntryId, RangeEnd, RangeStart};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,8 +31,8 @@ async fn handle_client(
     db: Arc<Database>,
     client_id: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use tokio::sync::mpsc;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::sync::mpsc;
 
     let (reader, mut writer) = socket.into_split();
     let mut reader = BufReader::new(reader);
@@ -53,9 +53,10 @@ async fn handle_client(
     });
 
     let mut line = String::new();
-    
+
     tx.send("Redis Streams Server: \n".to_string()).await?;
-    tx.send("Commands: XADD, XRANGE, XREAD, XLEN, HELP, QUIT.".to_string()).await?;
+    tx.send("Commands: XADD, XRANGE, XREAD, XLEN, HELP, QUIT.".to_string())
+        .await?;
     tx.send("\n> ".to_string()).await?;
 
     loop {
@@ -102,7 +103,8 @@ async fn handle_client(
                 tx.send(format!("{}\n> ", response)).await?;
             }
             _ => {
-                tx.send("Unknown command. Type HELP for available commands.\n> ".to_string()).await?;
+                tx.send("Unknown command. Type HELP for available commands.\n> ".to_string())
+                    .await?;
             }
         }
     }
@@ -114,11 +116,11 @@ async fn handle_client(
 }
 
 async fn handle_help() -> String {
-  let b = "\x1b[1m";      // bold
-  let dim = "\x1b[90m";   // dim
-  let r = "\x1b[0m";      // reset
-  format!(
-  "Available commands:
+    let b = "\x1b[1m"; // bold
+    let dim = "\x1b[90m"; // dim
+    let r = "\x1b[0m"; // reset
+    format!(
+        "Available commands:
 {b}XADD  {r}{dim}<stream_name> <id|*> <field> <value> [field value ...]{r}
       Add entry (auto id with *).
 {b}XRANGE{r} {dim}<stream_name> <start_id|-> <end_id|+> [COUNT <n>]{r}
@@ -138,12 +140,13 @@ async fn handle_help() -> String {
       Show this help.
 {b}QUIT/EXIT  {r}
       Exit.\n"
-  )
+    )
 }
 
 async fn handle_xadd(db: &Database, parts: &[String], client_id: &str) -> String {
     if parts.len() < 4 {
-        return "Error: Usage: XADD <stream_name> <id|*> <field> <value> [field value ...]".to_string();
+        return "Error: Usage: XADD <stream_name> <id|*> <field> <value> [field value ...]"
+            .to_string();
     }
 
     let stream_name = parts[1].as_str();
@@ -154,11 +157,7 @@ async fn handle_xadd(db: &Database, parts: &[String], client_id: &str) -> String
         return "Error: field count must be even".to_string();
     }
 
-    let entry_id: Option<&str> = if id_str == "*" {
-        None
-    } else {
-        Some(id_str)
-    };
+    let entry_id: Option<&str> = if id_str == "*" { None } else { Some(id_str) };
 
     let fields: Vec<(String, Vec<u8>)> = field_parts
         .chunks(2)
@@ -176,7 +175,8 @@ async fn handle_xadd(db: &Database, parts: &[String], client_id: &str) -> String
 
 async fn handle_xrange(db: &Database, parts: &[String], client_id: &str) -> String {
     if parts.len() < 4 {
-        return "Error: Usage: XRANGE <stream_name> <start_id|-> <end_id|+> [COUNT <c>]".to_string();
+        return "Error: Usage: XRANGE <stream_name> <start_id|-> <end_id|+> [COUNT <c>]"
+            .to_string();
     }
 
     let stream_name = parts[1].as_str();
@@ -211,7 +211,12 @@ async fn handle_xrange(db: &Database, parts: &[String], client_id: &str) -> Stri
 
     match db.xrange(stream_name, start, end, count).await {
         Ok(entries) => {
-            println!("[{}] XRANGE {} -> {} entries", client_id, stream_name, entries.len());
+            println!(
+                "[{}] XRANGE {} -> {} entries",
+                client_id,
+                stream_name,
+                entries.len()
+            );
             format_entries(&entries)
         }
         Err(e) => format!("Error: {}", e),
@@ -220,7 +225,8 @@ async fn handle_xrange(db: &Database, parts: &[String], client_id: &str) -> Stri
 
 async fn handle_xread(db: &Database, parts: &[String], client_id: &str) -> String {
     if parts.len() < 4 {
-        return "Error: Usage: XREAD [COUNT <c>] [BLOCK <ms>] STREAMS <stream_name> <id|$>".to_string();
+        return "Error: Usage: XREAD [COUNT <c>] [BLOCK <ms>] STREAMS <stream_name> <id|$>"
+            .to_string();
     }
 
     let mut i = 1;
@@ -266,7 +272,13 @@ async fn handle_xread(db: &Database, parts: &[String], client_id: &str) -> Strin
     let start_id = parts[i + 1].as_str();
 
     if let Some(timeout) = block_ms {
-        println!("[{}] XREAD BLOCK {} on {} (timeout: {}ms)", client_id, stream_name, start_id, timeout.as_millis());
+        println!(
+            "[{}] XREAD BLOCK {} on {} (timeout: {}ms)",
+            client_id,
+            stream_name,
+            start_id,
+            timeout.as_millis()
+        );
     } else {
         println!("[{}] XREAD {} from {}", client_id, stream_name, start_id);
     }
@@ -277,14 +289,30 @@ async fn handle_xread(db: &Database, parts: &[String], client_id: &str) -> Strin
             let elapsed = start_time.elapsed();
             if entries.is_empty() {
                 if elapsed.as_millis() > 100 {
-                    println!("[{}] XREAD {} completed after {}ms (timeout/no data)", client_id, stream_name, elapsed.as_millis());
+                    println!(
+                        "[{}] XREAD {} completed after {}ms (timeout/no data)",
+                        client_id,
+                        stream_name,
+                        elapsed.as_millis()
+                    );
                 }
                 "(empty array)".to_string()
             } else {
                 if elapsed.as_millis() > 100 {
-                    println!("[{}] XREAD {} unblocked after {}ms with {} entries", client_id, stream_name, elapsed.as_millis(), entries.len());
+                    println!(
+                        "[{}] XREAD {} unblocked after {}ms with {} entries",
+                        client_id,
+                        stream_name,
+                        elapsed.as_millis(),
+                        entries.len()
+                    );
                 } else {
-                    println!("[{}] XREAD {} returned {} entries", client_id, stream_name, entries.len());
+                    println!(
+                        "[{}] XREAD {} returned {} entries",
+                        client_id,
+                        stream_name,
+                        entries.len()
+                    );
                 }
                 format_entries(&entries)
             }
@@ -309,19 +337,23 @@ async fn handle_xlen(db: &Database, parts: &[String], client_id: &str) -> String
 }
 
 fn format_entries(entries: &[Entry]) -> String {
-  let mut output = String::new();
-  for (i, entry) in entries.iter().enumerate() {
-      output.push_str(&format!("{})", i + 1));
-      output.push_str(&format!(" 1) \"{}\"\n", entry.id));
-      output.push_str("   2)");
-      for (j, (field, value)) in entry.fields.iter().enumerate() {
-          if j== 0 {
-            output.push_str(&format!(" {}) \"{}\"\n",1, field));
-          } else {
-            output.push_str(&format!("      {}) \"{}\"\n", j * 2 + 1, field));
-          }
-          output.push_str(&format!("      {}) \"{}\"\n", j * 2 + 2, String::from_utf8_lossy(&value)));
-      }
-  }
-  output
+    let mut output = String::new();
+    for (i, entry) in entries.iter().enumerate() {
+        output.push_str(&format!("{})", i + 1));
+        output.push_str(&format!(" 1) \"{}\"\n", entry.id));
+        output.push_str("   2)");
+        for (j, (field, value)) in entry.fields.iter().enumerate() {
+            if j == 0 {
+                output.push_str(&format!(" {}) \"{}\"\n", 1, field));
+            } else {
+                output.push_str(&format!("      {}) \"{}\"\n", j * 2 + 1, field));
+            }
+            output.push_str(&format!(
+                "      {}) \"{}\"\n",
+                j * 2 + 2,
+                String::from_utf8_lossy(&value)
+            ));
+        }
+    }
+    output
 }

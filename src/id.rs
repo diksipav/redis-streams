@@ -1,6 +1,6 @@
+use crate::errors::Error;
 use std::fmt;
 use std::str::FromStr;
-use crate::errors::Error;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct EntryId {
@@ -57,7 +57,7 @@ impl IdGenerator {
         }
     }
 
-    pub fn generate_id(&mut self, current_ms:u64) -> EntryId {
+    pub fn generate_id(&mut self, current_ms: u64) -> EntryId {
         // Uses last recorded timestamp with incremented sequence when system time decreases.
         let ms = current_ms.max(self.last_id.ms);
         let seq = if ms == self.last_id.ms {
@@ -75,11 +75,11 @@ impl IdGenerator {
         let id = EntryId::from_str(id_str)?;
 
         if !id.is_valid() {
-          return Err(Error::IdShoulHavePositiveTimestamp);
+            return Err(Error::IdShoulHavePositiveTimestamp);
         }
 
-        if id <=self.last_id {
-          return Err(Error::IdNotMonotonic);
+        if id <= self.last_id {
+            return Err(Error::IdNotMonotonic);
         }
 
         self.last_id = id;
@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn test_generate_id() {
         let mut generator = IdGenerator::new();
-        
+
         let id1 = generator.generate_id(1000);
         assert_eq!(id1, EntryId::new(1000, 0));
 
@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn test_validate_id() {
         let mut generator = IdGenerator::new();
-        
+
         let id1 = generator.validate_id("1000-0").unwrap();
         assert_eq!(id1, EntryId::new(1000, 0));
 

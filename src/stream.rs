@@ -1,8 +1,8 @@
-use tokio::sync::Notify;
-use std::sync::Arc;
-use crate::errors::Result;
-use crate::id::{IdGenerator, EntryId};
 use crate::clock::Clock;
+use crate::errors::Result;
+use crate::id::{EntryId, IdGenerator};
+use std::sync::Arc;
+use tokio::sync::Notify;
 
 #[derive(Clone, Debug)]
 pub struct Entry {
@@ -14,7 +14,10 @@ impl Entry {
     pub fn new(id: EntryId, fields: Vec<(String, Vec<u8>)>) -> Self {
         Self {
             id,
-            fields: fields.into_iter().map(|(k, v)| (k.into_boxed_str(), v)).collect(),
+            fields: fields
+                .into_iter()
+                .map(|(k, v)| (k.into_boxed_str(), v))
+                .collect(),
         }
     }
 }
@@ -22,7 +25,7 @@ impl Entry {
 pub struct Stream {
     entries: Vec<Entry>,
     id_generator: IdGenerator,
-    notify: Arc<Notify>
+    notify: Arc<Notify>,
 }
 
 impl Stream {
@@ -30,7 +33,7 @@ impl Stream {
         Self {
             entries: Vec::new(),
             id_generator: IdGenerator::new(),
-            notify: Arc::new(Notify::new())
+            notify: Arc::new(Notify::new()),
         }
     }
 
@@ -46,7 +49,7 @@ impl Stream {
     ) -> Result<EntryId> {
         let id = match id_opt {
             Some(explicit_id) => self.id_generator.validate_id(explicit_id)?,
-            None => self.id_generator.generate_id(clock.now_ms())
+            None => self.id_generator.generate_id(clock.now_ms()),
         };
         let entry = Entry::new(id, fields);
         self.entries.push(entry);
@@ -54,12 +57,7 @@ impl Stream {
         Ok(id)
     }
 
-    pub fn xrange(
-        &self,
-        start: RangeStart,
-        end: RangeEnd,
-        count: Option<usize>,
-    ) -> Vec<Entry> {
+    pub fn xrange(&self, start: RangeStart, end: RangeEnd, count: Option<usize>) -> Vec<Entry> {
         if self.entries.is_empty() {
             return Vec::new();
         }
@@ -68,7 +66,7 @@ impl Stream {
             RangeStart::Start => 0,
             RangeStart::Id(id) => {
                 match self.entries.binary_search_by_key(&id, |e| e.id) {
-                    Ok(idx) => idx, // index of the entry with id
+                    Ok(idx) => idx,  // index of the entry with id
                     Err(idx) => idx, // index where entry with id would be inserted
                 }
             }
@@ -79,14 +77,14 @@ impl Stream {
         }
 
         self.entries[start_idx..]
-        .iter()
-        .take_while(|entry| match end {
-            RangeEnd::End => true,
-            RangeEnd::Id(end_id) => entry.id <= end_id,
-        })
-        .take(count.unwrap_or(usize::MAX))
-        .cloned()
-        .collect()
+            .iter()
+            .take_while(|entry| match end {
+                RangeEnd::End => true,
+                RangeEnd::Id(end_id) => entry.id <= end_id,
+            })
+            .take(count.unwrap_or(usize::MAX))
+            .cloned()
+            .collect()
     }
 
     pub fn xread(&self, id: EntryId, count: Option<usize>) -> Vec<Entry> {
@@ -95,8 +93,8 @@ impl Stream {
         }
 
         let start_idx = match self.entries.binary_search_by(|e| e.id.cmp(&id)) {
-            Ok(idx) => idx + 1,  
-            Err(idx) => idx
+            Ok(idx) => idx + 1,
+            Err(idx) => idx,
         };
 
         if start_idx >= self.entries.len() {
@@ -168,9 +166,15 @@ mod tests {
         let mut stream = Stream::new();
         let clock = MockClock::new(1000);
         let id1 = EntryId::new(1000, 5);
-        let result = stream.xadd(Some("1000-5"), create_test_fields(), &clock).unwrap();
+        let result = stream
+            .xadd(Some("1000-5"), create_test_fields(), &clock)
+            .unwrap();
         assert_eq!(result, id1);
-        assert!(stream.xadd(Some("1000-4"), create_test_fields(), &clock).is_err());
+        assert!(
+            stream
+                .xadd(Some("1000-4"), create_test_fields(), &clock)
+                .is_err()
+        );
     }
 
     #[test]
@@ -199,8 +203,7 @@ mod tests {
         let clock = MockClock::new(1000);
         stream.xadd(None, create_test_fields(), &clock).unwrap();
         stream.xadd(None, create_test_fields(), &clock).unwrap();
-        let result = stream
-            .xread(EntryId::new(1000, 0), Some(1));
+        let result = stream.xread(EntryId::new(1000, 0), Some(1));
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, EntryId::new(1000, 1));
     }
@@ -210,12 +213,14 @@ mod tests {
         use crate::Database;
         use std::sync::Arc;
         use std::time::Duration;
-        
+
         let db = Arc::new(Database::new());
-                
+
         let db_xread = Arc::clone(&db);
         let xread_handle = tokio::spawn(async move {
-            db_xread.xread("teststream", "$", None, Some(Duration::from_millis(5000))).await
+            db_xread
+                .xread("teststream", "$", None, Some(Duration::from_millis(5000)))
+                .await
         });
 
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -234,7 +239,10 @@ mod tests {
         let entries = xread_result.unwrap();
         assert_eq!(entries.len(), 1, "XREAD should return one entry");
         assert_eq!(entries[0].id, xadd_result.0);
-        assert_eq!(entries[0].fields, vec![(Box::from("field1"), b"value1".to_vec())]);
+        assert_eq!(
+            entries[0].fields,
+            vec![(Box::from("field1"), b"value1".to_vec())]
+        );
     }
 
     #[test]

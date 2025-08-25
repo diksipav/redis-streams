@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-use std::str::FromStr;
-use tokio::sync::RwLock;
 use crate::clock::{Clock, SystemClock};
 use crate::errors::{Error, Result};
 use crate::id::EntryId;
 use crate::stream::{Entry, RangeEnd, RangeStart, Stream};
+use std::collections::HashMap;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
 
 pub struct Database {
     streams: RwLock<HashMap<String, Arc<RwLock<Stream>>>>,
@@ -39,13 +39,12 @@ impl Database {
             return Err(Error::InvalidArgs);
         }
         let mut streams_guard = self.streams.write().await;
-        let stream_handle =
-            streams_guard
-                .entry(key.to_string())
-                .or_insert(Arc::new(RwLock::new(Stream::new())));
-        
+        let stream_handle = streams_guard
+            .entry(key.to_string())
+            .or_insert(Arc::new(RwLock::new(Stream::new())));
+
         let mut stream_guard = stream_handle.write().await;
-        stream_guard.xadd(entry_id, fields, &*self.clock) 
+        stream_guard.xadd(entry_id, fields, &*self.clock)
     }
 
     pub async fn xrange(
@@ -75,11 +74,14 @@ impl Database {
                     .entry(key.to_string())
                     .or_insert_with(|| Arc::new(RwLock::new(Stream::new())))
                     .clone()
-            },
+            }
             None => {
                 let streams_guard = self.streams.read().await;
-                streams_guard.get(key).cloned().ok_or(Error::StreamNotFound)?
-            },
+                streams_guard
+                    .get(key)
+                    .cloned()
+                    .ok_or(Error::StreamNotFound)?
+            }
         };
 
         let start_id = match from {
@@ -88,46 +90,44 @@ impl Database {
                 stream_guard.get_latest_id().unwrap_or(EntryId::zero())
             }
             "0" | "0-0" => EntryId::zero(),
-            _ => {
-                match EntryId::from_str(from) {
-                    Ok(id) => id,
-                    Err(_) => return Err(Error::BadIdFormat)
-                }
-            }
+            _ => match EntryId::from_str(from) {
+                Ok(id) => id,
+                Err(_) => return Err(Error::BadIdFormat),
+            },
         };
 
         if let Some(timeout) = block {
             // Blocking case
             let deadline = tokio::time::Instant::now() + timeout;
-            
+
             let notify_handle = {
                 let stream_guard = stream_handle.read().await;
                 stream_guard.get_notify_handle()
             };
             let notified = notify_handle.notified();
             tokio::pin!(notified);
-            
+
             loop {
                 let result = {
                     let stream_guard = stream_handle.read().await;
                     stream_guard.xread(start_id, count)
                 };
-                
+
                 if !result.is_empty() {
                     return Ok(result);
                 }
-                
+
                 let remaining = deadline.checked_duration_since(tokio::time::Instant::now());
                 if remaining.is_none() {
                     return Ok(Vec::new()); // Return empty on timeout as in Redis
                 }
-                
+
                 // Wait for notification or timeout
                 match tokio::time::timeout(remaining.unwrap(), notified.as_mut()).await {
                     Ok(_) => {
                         notified.set(notify_handle.notified());
-                    },
-                    Err(_) => return Ok(Vec::new())
+                    }
+                    Err(_) => return Ok(Vec::new()),
                 }
             }
         } else {
@@ -136,7 +136,6 @@ impl Database {
             Ok(stream_guard.xread(start_id, count))
         }
     }
-
 
     pub async fn xlen(&self, key: &str) -> Result<usize> {
         let streams_guard = self.streams.read().await;
@@ -173,7 +172,10 @@ mod tests {
     async fn test_xadd_creates_stream() {
         let db = Database::new();
         assert!(!db.stream_exists("mystream").await);
-        let id = db.xadd("mystream", None, create_test_fields()).await.unwrap();
+        let id = db
+            .xadd("mystream", None, create_test_fields())
+            .await
+            .unwrap();
         assert!(id.ms > 0);
         assert_eq!(id.seq, 0);
         assert!(db.stream_exists("mystream").await);
@@ -198,8 +200,12 @@ mod tests {
     async fn test_multiple_streams() {
         let clock = MockClock::new(1000);
         let db = Database::with_clock(clock);
-        db.xadd("stream1", None, create_test_fields()).await.unwrap();
-        db.xadd("stream2", None, create_test_fields()).await.unwrap();
+        db.xadd("stream1", None, create_test_fields())
+            .await
+            .unwrap();
+        db.xadd("stream2", None, create_test_fields())
+            .await
+            .unwrap();
         assert_eq!(db.xlen("stream1").await.unwrap(), 1);
         assert_eq!(db.xlen("stream2").await.unwrap(), 1);
         let streams = db.list_streams().await;
@@ -211,9 +217,7 @@ mod tests {
     #[tokio::test]
     async fn test_xread_nonexistent_stream() {
         let db = Database::new();
-        let result = db
-            .xread("nonexistent", "$", None, None)
-            .await;
+        let result = db.xread("nonexistent", "$", None, None).await;
         assert!(result.is_err());
     }
 
@@ -222,7 +226,9 @@ mod tests {
         let db = Arc::new(Database::new());
 
         // Create stream first with an initial entry
-        db.xadd("mystream", None, create_test_fields()).await.unwrap();
+        db.xadd("mystream", None, create_test_fields())
+            .await
+            .unwrap();
 
         let db_xread = Arc::clone(&db);
         let xread_handle = tokio::spawn(async move {
@@ -244,11 +250,18 @@ mod tests {
         let (xread_result, xread_time) = xread_handle.await.unwrap();
         let (xadd_result, xadd_time) = xadd_handle.await.unwrap();
 
-        assert!(xread_result.is_ok(), "XREAD should succeed, got error: {:?}", xread_result.as_ref().err());
+        assert!(
+            xread_result.is_ok(),
+            "XREAD should succeed, got error: {:?}",
+            xread_result.as_ref().err()
+        );
         let entries = xread_result.unwrap();
         assert_eq!(entries.len(), 1, "XREAD should return one entry");
         assert_eq!(entries[0].id, xadd_result.unwrap());
-        assert_eq!(entries[0].fields, vec![(Box::from("field1"), b"value1".to_vec())]);
+        assert_eq!(
+            entries[0].fields,
+            vec![(Box::from("field1"), b"value1".to_vec())]
+        );
         assert!(xread_time >= xadd_time, "XREAD completes after XADD");
     }
 }
