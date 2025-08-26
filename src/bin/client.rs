@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         input.clear();
         match stdin_reader.read_line(&mut input).await {
-            Ok(0) => break, // EOF
+            Ok(0) => break, // EOF (Ctrl-D on macOS/linux)
             Ok(_) => {
                 let command = input.trim();
                 if command.is_empty() {
@@ -31,7 +31,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 if command.to_uppercase() == "QUIT" || command.to_uppercase() == "EXIT" {
                     writer.write_all(b"QUIT\n").await?;
-                    writer.flush().await?;
 
                     let mut final_response = String::new();
                     let _ = reader.read_line(&mut final_response).await;
@@ -39,10 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
 
-                writer.write_all(command.as_bytes()).await?;
                 // Server expects new lines at the end of commands
-                writer.write_all(b"\n").await?;
-                writer.flush().await?;
+                writer
+                    .write_all(format!("{}\n", command).as_bytes())
+                    .await?;
 
                 // Read response until we get a prompt
                 read_response(&mut reader).await?;
@@ -68,10 +67,10 @@ async fn read_response(reader: &mut BufReader<OwnedReadHalf>) -> Result<(), std:
             Ok(_) => {
                 buffer.push(byte[0]);
                 let text = String::from_utf8_lossy(&buffer);
-                print!("{}", char::from(byte[0]));
-                io::stdout().flush()?;
 
                 if text.ends_with("\n> ") {
+                    print!("{}", text);
+                    io::stdout().flush()?;
                     return Ok(());
                 }
             }

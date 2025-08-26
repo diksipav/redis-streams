@@ -26,38 +26,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+// mpsc channel can be benefiial in more complex situations
+// for example when spawning task per command, it would be nice to centralise
+// all writes to the client in a special writing task
 async fn handle_client(
     socket: TcpStream,
     db: Arc<Database>,
     client_id: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::sync::mpsc;
 
     let (reader, mut writer) = socket.into_split();
     let mut reader = BufReader::new(reader);
-    let (tx, mut rx) = mpsc::channel::<String>(100);
-
-    let client_id_writer = client_id.clone();
-    let write_handle = tokio::spawn(async move {
-        while let Some(response) = rx.recv().await {
-            if let Err(e) = writer.write_all(response.as_bytes()).await {
-                eprintln!("Client {} write error: {}", client_id_writer, e);
-                break;
-            }
-            if let Err(e) = writer.flush().await {
-                eprintln!("Client {} flush error: {}", client_id_writer, e);
-                break;
-            }
-        }
-    });
 
     let mut line = String::new();
 
-    tx.send("Redis Streams Server: \n".to_string()).await?;
-    tx.send("Commands: XADD, XRANGE, XREAD, XLEN, HELP, QUIT.".to_string())
+    writer.write_all(b"Redis Streams Server: \n").await?;
+    writer
+        .write_all(b"Commands: XADD, XRANGE, XREAD, XLEN, HELP, QUIT.")
         .await?;
-    tx.send("\n> ".to_string()).await?;
+    writer.write_all(b"\n> ").await?;
 
     loop {
         line.clear();
@@ -68,49 +56,55 @@ async fn handle_client(
 
         let input = line.trim();
         if input.is_empty() {
-            tx.send("> ".to_string()).await?;
+            writer.write_all(b"> ").await?;
             continue;
         }
 
         let parts: Vec<String> = input.split_whitespace().map(String::from).collect();
 
-        let db = Arc::clone(&db);
-        let tx = tx.clone();
-
         match parts[0].to_uppercase().as_str() {
             "QUIT" | "EXIT" => {
-                tx.send("Goodbye!\n".to_string()).await?;
+                writer.write_all(b"Goodbye!\n").await?;
                 break;
             }
             "HELP" => {
                 let response = handle_help().await;
-                tx.send(format!("{}\n> ", response)).await?;
+                println!("didi {response}");
+                writer
+                    .write_all(format!("{}\n> ", response).as_bytes())
+                    .await?;
             }
             "XADD" => {
                 let response = handle_xadd(&db, &parts, &client_id).await;
-                tx.send(format!("{}\n> ", response)).await?;
+                writer
+                    .write_all(format!("{}\n> ", response).as_bytes())
+                    .await?;
             }
             "XRANGE" => {
                 let response = handle_xrange(&db, &parts, &client_id).await;
-                tx.send(format!("{}\n> ", response)).await?;
+                writer
+                    .write_all(format!("{}\n> ", response).as_bytes())
+                    .await?;
             }
             "XREAD" => {
                 let response = handle_xread(&db, &parts, &client_id).await;
-                tx.send(format!("{}\n> ", response)).await?;
+                writer
+                    .write_all(format!("{}\n> ", response).as_bytes())
+                    .await?;
             }
             "XLEN" => {
                 let response = handle_xlen(&db, &parts, &client_id).await;
-                tx.send(format!("{}\n> ", response)).await?;
+                writer
+                    .write_all(format!("{}\n> ", response).as_bytes())
+                    .await?;
             }
             _ => {
-                tx.send("Unknown command. Type HELP for available commands.\n> ".to_string())
+                writer
+                    .write_all(b"Unknown command. Type HELP for available commands.\n> ")
                     .await?;
             }
         }
     }
-
-    drop(tx);
-    write_handle.await?;
 
     Ok(())
 }
