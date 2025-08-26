@@ -1,4 +1,5 @@
 use redis_streams::{Database, Entry, EntryId, RangeEnd, RangeStart};
+use redis_streams::clock::SystemClock;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 // all writes to the client in a special writing task
 async fn handle_client(
     socket: TcpStream,
-    db: Arc<Database>,
+    db: Arc<Database<SystemClock>>,
     client_id: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -137,7 +138,7 @@ async fn handle_help() -> String {
     )
 }
 
-async fn handle_xadd(db: &Database, parts: &[String], client_id: &str) -> String {
+async fn handle_xadd(db: &Database<SystemClock>, parts: &[String], client_id: &str) -> String {
     if parts.len() < 4 {
         return "Error: Usage: XADD <stream_name> <id|*> <field> <value> [field value ...]"
             .to_string();
@@ -167,7 +168,7 @@ async fn handle_xadd(db: &Database, parts: &[String], client_id: &str) -> String
     }
 }
 
-async fn handle_xrange(db: &Database, parts: &[String], client_id: &str) -> String {
+async fn handle_xrange(db: &Database<SystemClock>, parts: &[String], client_id: &str) -> String {
     if parts.len() < 4 {
         return "Error: Usage: XRANGE <stream_name> <start_id|-> <end_id|+> [COUNT <c>]"
             .to_string();
@@ -217,7 +218,7 @@ async fn handle_xrange(db: &Database, parts: &[String], client_id: &str) -> Stri
     }
 }
 
-async fn handle_xread(db: &Database, parts: &[String], client_id: &str) -> String {
+async fn handle_xread(db: &Database<SystemClock>, parts: &[String], client_id: &str) -> String {
     if parts.len() < 4 {
         return "Error: Usage: XREAD [COUNT <c>] [BLOCK <ms>] STREAMS <stream_name> <id|$>"
             .to_string();
@@ -315,7 +316,7 @@ async fn handle_xread(db: &Database, parts: &[String], client_id: &str) -> Strin
     }
 }
 
-async fn handle_xlen(db: &Database, parts: &[String], client_id: &str) -> String {
+async fn handle_xlen(db: &Database<SystemClock>, parts: &[String], client_id: &str) -> String {
     if parts.len() != 2 {
         return "Error: Usage: XLEN <stream_name>".to_string();
     }

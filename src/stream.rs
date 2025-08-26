@@ -41,11 +41,11 @@ impl Stream {
         Arc::clone(&self.notify)
     }
 
-    pub fn xadd(
+    pub fn xadd<C: Clock>(
         &mut self,
         id_opt: Option<&str>,
         fields: Vec<(String, Vec<u8>)>,
-        clock: &dyn Clock,
+        clock: &C,
     ) -> Result<EntryId> {
         let id = match id_opt {
             Some(explicit_id) => self.id_generator.validate_id(explicit_id)?,

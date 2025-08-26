@@ -8,24 +8,26 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-pub struct Database {
+pub struct Database<C: Clock> {
     streams: RwLock<HashMap<String, Arc<RwLock<Stream>>>>,
-    clock: Box<dyn Clock>,
+    clock: C,
 }
 
-impl Database {
+impl Database<SystemClock> {
     pub fn new() -> Self {
         Self {
             streams: RwLock::new(HashMap::new()),
-            clock: Box::new(SystemClock),
+            clock: SystemClock,
         }
     }
+}
 
+impl<C: Clock> Database<C> {
     #[cfg(test)]
-    pub fn with_clock<C: Clock + 'static>(clock: C) -> Self {
+    pub fn with_clock(clock: C) -> Self {
         Self {
             streams: RwLock::new(HashMap::new()),
-            clock: Box::new(clock),
+            clock: clock,
         }
     }
 
@@ -44,7 +46,7 @@ impl Database {
             .or_insert(Arc::new(RwLock::new(Stream::new())));
 
         let mut stream_guard = stream_handle.write().await;
-        stream_guard.xadd(entry_id, fields, &*self.clock)
+        stream_guard.xadd(entry_id, fields, &self.clock)
     }
 
     pub async fn xrange(
